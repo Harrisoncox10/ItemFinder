@@ -23,11 +23,12 @@ export default function App() {
   const [error, setError] = useState(null)
   const [locationName, setLocationName] = useState(null)
 
+  // Best-effort place name — must never block or fail the search itself
   const reverseGeocode = async (lat, lon) => {
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-        { headers: { 'Accept-Language': 'en' } },
+        { headers: { 'Accept-Language': 'en' }, signal: AbortSignal.timeout(5000) },
       )
       const data = await res.json()
       return data.address?.city || data.address?.town || data.address?.village || data.address?.suburb || null

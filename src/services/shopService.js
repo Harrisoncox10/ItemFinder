@@ -63,19 +63,27 @@ const formatAddress = (tags) => {
   return parts.length ? parts.join(', ') : null
 }
 
+// Abort a fetch that stalls — overloaded Overpass servers often accept the
+// connection but never respond, which would otherwise hang forever
+const fetchWithTimeout = (url, options, timeoutMs) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+    clearTimeout(timer),
+  )
+}
+
 export const findNearbyShops = async (lat, lon, item, radiusM = 5000) => {
   const shopTags = getShopTags(item)
 
-  // Build union of node/way queries for each tag
+  // nwr matches nodes, ways and relations in one clause — much cheaper for
+  // the server than separate node/way queries per tag
   const filters = shopTags
-    .flatMap((tag) => [
-      `node[${tag}](around:${radiusM},${lat},${lon});`,
-      `way[${tag}](around:${radiusM},${lat},${lon});`,
-    ])
+    .map((tag) => `nwr[${tag}](around:${radiusM},${lat},${lon});`)
     .join('\n      ')
 
   const query = `
-    [out:json][timeout:30];
+    [out:json][timeout:15];
     (
       ${filters}
     );
@@ -86,11 +94,15 @@ export const findNearbyShops = async (lat, lon, item, radiusM = 5000) => {
   let lastError = null
   for (const url of OVERPASS_URLS) {
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-      })
+      const res = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+        },
+        18000,
+      )
       if (!res.ok) throw new Error(`Shop lookup failed (HTTP ${res.status})`)
       data = await res.json()
       break
@@ -99,9 +111,11 @@ export const findNearbyShops = async (lat, lon, item, radiusM = 5000) => {
     }
   }
   if (!data) {
+    const detail =
+      lastError?.name === 'AbortError' ? 'servers are busy' : lastError?.message
     throw new Error(
-      lastError?.message
-        ? `Could not reach the shop database (${lastError.message}). Please try again in a moment.`
+      detail
+        ? `Could not reach the shop database (${detail}). Please try again in a moment.`
         : 'Could not reach the shop database. Please try again in a moment.',
     )
   }
