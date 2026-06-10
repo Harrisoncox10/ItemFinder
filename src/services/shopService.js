@@ -1,4 +1,9 @@
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+// Public Overpass servers, tried in order — the primary is often overloaded
+const OVERPASS_URLS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+]
 
 // Map search keywords → OSM shop tags to keep results relevant
 const getShopTags = (item) => {
@@ -77,15 +82,29 @@ export const findNearbyShops = async (lat, lon, item, radiusM = 5000) => {
     out center tags;
   `
 
-  const res = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
-  })
-
-  if (!res.ok) throw new Error(`Overpass API error: ${res.status}`)
-
-  const data = await res.json()
+  let data = null
+  let lastError = null
+  for (const url of OVERPASS_URLS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+      })
+      if (!res.ok) throw new Error(`Shop lookup failed (HTTP ${res.status})`)
+      data = await res.json()
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (!data) {
+    throw new Error(
+      lastError?.message
+        ? `Could not reach the shop database (${lastError.message}). Please try again in a moment.`
+        : 'Could not reach the shop database. Please try again in a moment.',
+    )
+  }
 
   const seen = new Set()
   return data.elements

@@ -1,13 +1,16 @@
 import { useState } from 'react'
-import { AlertCircle, PackageSearch, MapPin } from 'lucide-react'
+import { AlertCircle, PackageSearch, MapPin, ShoppingCart, ExternalLink } from 'lucide-react'
 import SearchBar from './components/SearchBar'
 import ShopCard from './components/ShopCard'
 import LoadingState from './components/LoadingState'
 import { getCurrentLocation } from './services/locationService'
 import { findNearbyShops } from './services/shopService'
+import { ONLINE_RETAILERS } from './utils/retailerLinks'
 
 const RADIUS_OPTIONS = [1000, 2000, 5000, 10000, 20000]
 const radiusLabel = (m) => (m >= 1000 ? `${m / 1000} km` : `${m} m`)
+
+const EXAMPLE_ITEMS = ['Referee top', 'Whistle', 'Football boots', 'Shin pads', 'Phone charger']
 
 export default function App() {
   const [query, setQuery] = useState('')
@@ -33,9 +36,10 @@ export default function App() {
     }
   }
 
-  const handleSearch = async () => {
-    const item = query.trim()
+  const handleSearch = async (overrideItem) => {
+    const item = (typeof overrideItem === 'string' ? overrideItem : query).trim()
     if (!item) return
+    if (typeof overrideItem === 'string') setQuery(overrideItem)
 
     setLoading(true)
     setError(null)
@@ -90,6 +94,21 @@ export default function App() {
             onSearch={handleSearch}
             loading={loading}
           />
+
+          {/* Example suggestions */}
+          <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+            <span className="text-slate-500">Try:</span>
+            {EXAMPLE_ITEMS.map((item) => (
+              <button
+                key={item}
+                onClick={() => handleSearch(item)}
+                disabled={loading}
+                className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300 hover:bg-white/15 hover:text-white transition disabled:opacity-40"
+              >
+                {item}
+              </button>
+            ))}
+          </div>
 
           {/* Radius picker */}
           <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -154,12 +173,37 @@ export default function App() {
             )}
 
             {shops.length === 0 && (
-              <div className="flex flex-col items-center gap-4 py-16 text-slate-500">
+              <div className="flex flex-col items-center gap-4 py-12 text-slate-500">
                 <PackageSearch className="w-16 h-16 opacity-30" />
                 <p className="text-lg">No shops found in this area for that item type.</p>
                 <p className="text-sm">Try expanding the radius or searching more broadly (e.g. "sports equipment").</p>
               </div>
             )}
+
+            {/* Online fallback */}
+            <div className="mt-10 glass rounded-2xl p-5">
+              <h3 className="flex items-center gap-2 font-bold text-white mb-1">
+                <ShoppingCart className="w-4 h-4 text-blue-400" />
+                Can't find it locally?
+              </h3>
+              <p className="text-sm text-slate-400 mb-4">
+                Search for "{searchedItem}" at these online retailers:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {ONLINE_RETAILERS.map(({ name, url }) => (
+                  <a
+                    key={name}
+                    href={url(searchedItem)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-sm font-medium transition"
+                  >
+                    {name}
+                    <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+                  </a>
+                ))}
+              </div>
+            </div>
           </>
         )}
 
